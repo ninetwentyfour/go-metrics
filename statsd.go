@@ -46,7 +46,11 @@ func StatsdWithConfig(c StatsdConfig) {
 
 func statsd(c *StatsdConfig) error {
 	du := float64(c.DurationUnit)
-	s, _ := Dial(c.Addr)
+
+	s, err := Dial(c.Addr)
+	if err != nil {
+		return err
+	}
 
 	c.Registry.Each(func(name string, i interface{}) {
 		switch metric := i.(type) {
