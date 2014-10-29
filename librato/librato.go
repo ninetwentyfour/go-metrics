@@ -2,11 +2,12 @@ package librato
 
 import (
 	"fmt"
-	"github.com/rcrowley/go-metrics"
 	"log"
 	"math"
 	"regexp"
 	"time"
+
+	"github.com/rcrowley/go-metrics"
 )
 
 // a regexp for extracting the unit from time.Duration.String
@@ -45,9 +46,11 @@ func (self *Reporter) Run() {
 		var err error
 		if metrics, err = self.BuildRequest(now, self.Registry); err != nil {
 			log.Printf("ERROR constructing librato request body %s", err)
+			continue
 		}
 		if err := metricsApi.PostMetrics(metrics); err != nil {
 			log.Printf("ERROR sending metrics to librato %s", err)
+			continue
 		}
 	}
 }
@@ -87,14 +90,16 @@ func (self *Reporter) BuildRequest(now time.Time, r metrics.Registry) (snapshot 
 		measurement[Period] = self.Interval.Seconds()
 		switch m := metric.(type) {
 		case metrics.Counter:
-			measurement[Name] = fmt.Sprintf("%s.%s", name, "count")
-			measurement[Value] = float64(m.Count())
-			measurement[Attributes] = map[string]interface{}{
-				DisplayUnitsLong:  Operations,
-				DisplayUnitsShort: OperationsShort,
-				DisplayMin:        "0",
+			if m.Count() > 0 {
+				measurement[Name] = fmt.Sprintf("%s.%s", name, "count")
+				measurement[Value] = float64(m.Count())
+				measurement[Attributes] = map[string]interface{}{
+					DisplayUnitsLong:  Operations,
+					DisplayUnitsShort: OperationsShort,
+					DisplayMin:        "0",
+				}
+				snapshot.Counters = append(snapshot.Counters, measurement)
 			}
-			snapshot.Counters = append(snapshot.Counters, measurement)
 		case metrics.Gauge:
 			measurement[Name] = name
 			measurement[Value] = float64(m.Value())
@@ -109,7 +114,6 @@ func (self *Reporter) BuildRequest(now time.Time, r metrics.Registry) (snapshot 
 				s := m.Sample()
 				measurement[Name] = fmt.Sprintf("%s.%s", name, "hist")
 				measurement[Count] = uint64(s.Count())
-				measurement[Sum] = s.Sum()
 				measurement[Max] = float64(s.Max())
 				measurement[Min] = float64(s.Min())
 				measurement[SumSquares] = sumSquares(s)
@@ -169,7 +173,6 @@ func (self *Reporter) BuildRequest(now time.Time, r metrics.Registry) (snapshot 
 				gauges[0] = Measurement{
 					Name:       libratoName,
 					Count:      uint64(m.Count()),
-					Sum:        m.Mean() * float64(m.Count()),
 					Max:        float64(m.Max()),
 					Min:        float64(m.Min()),
 					SumSquares: sumSquaresTimer(m),
